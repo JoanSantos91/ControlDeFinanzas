@@ -81,6 +81,55 @@ div[data-testid="stForm"]{background:#fff;border:1px solid var(--line);border-ra
 .stButton>button p{font-size:1.02rem!important;line-height:1.38!important}
 @media(max-width:900px){.metric-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:650px){.hero-title{font-size:1.8rem}.block-container{padding-left:.8rem;padding-right:.8rem}}
+
+.goal-shell{
+  display:grid;
+  grid-template-columns:230px 1fr;
+  gap:24px;
+  align-items:center;
+  background:linear-gradient(135deg,#071f3b 0%,#0b3768 62%,#145aa8 100%);
+  border-radius:28px;
+  padding:24px 26px;
+  margin:12px 0 22px;
+  box-shadow:0 18px 42px rgba(8,38,74,.18);
+  overflow:hidden;
+}
+.goal-ring{
+  --p:0;
+  width:190px;height:190px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:conic-gradient(#4ade80 calc(var(--p)*1%), rgba(255,255,255,.16) 0);
+  position:relative;margin:auto;
+}
+.goal-ring:after{
+  content:"";position:absolute;width:148px;height:148px;border-radius:50%;
+  background:#092a50;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);
+}
+.goal-ring-content{position:relative;z-index:2;text-align:center;color:#fff}
+.goal-percent{font-size:2.15rem;font-weight:950;line-height:1}
+.goal-label{font-size:.82rem;color:#cfe5ff;margin-top:6px;font-weight:700}
+.goal-copy h3{color:#fff!important;font-size:1.5rem!important;margin:0 0 5px}
+.goal-copy p{color:#d7e9ff;margin:0;font-size:1rem}
+.goal-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:18px}
+.goal-stat{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:12px}
+.goal-stat-label{font-size:.78rem;color:#c9ddf5;font-weight:750}
+.goal-stat-value{font-size:1.12rem;color:#fff;font-weight:900;margin-top:3px}
+.goal-message{margin-top:14px;color:#aee9c9;font-weight:800;font-size:.94rem}
+div[data-testid="column"] > div > div > div > div > .stButton > button{
+  box-shadow:0 7px 18px rgba(28,57,91,.05);
+}
+button[kind="secondary"]{
+  background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%)!important;
+}
+button[kind="secondary"]:hover{
+  transform:translateY(-1px);
+  box-shadow:0 10px 24px rgba(20,99,214,.10)!important;
+}
+@media(max-width:760px){
+  .goal-shell{grid-template-columns:1fr;text-align:center}
+  .goal-stats{grid-template-columns:1fr}
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -193,7 +242,12 @@ def init_db():
             variable_amount INTEGER DEFAULT 0,
             image_path TEXT,
             active INTEGER DEFAULT 1,
-            notes TEXT DEFAULT ''
+            notes TEXT DEFAULT '',
+            next_due_date TEXT,
+            coverage_start TEXT,
+            coverage_end TEXT,
+            policy_end TEXT,
+            subsequent_amount REAL
         );
         CREATE TABLE IF NOT EXISTS expense_payments(
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -232,6 +286,18 @@ def init_db():
         );
         CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
         """)
+        # Migraciones suaves para versiones anteriores del archivo SQLite.
+        existing_cols = {r[1] for r in c.execute("PRAGMA table_info(recurring_expenses)").fetchall()}
+        for col, ddl in [
+            ("next_due_date", "TEXT"),
+            ("coverage_start", "TEXT"),
+            ("coverage_end", "TEXT"),
+            ("policy_end", "TEXT"),
+            ("subsequent_amount", "REAL"),
+        ]:
+            if col not in existing_cols:
+                c.execute(f"ALTER TABLE recurring_expenses ADD COLUMN {col} {ddl}")
+
         if c.execute("SELECT COUNT(*) FROM debts").fetchone()[0] == 0:
             seed = [
                 ("Banorte Oro","Banorte","credit_card",13429.21,13429.21,15000.00,1570.79,990.47,30,"assets/banorte_oro.png",30,""),
@@ -257,6 +323,25 @@ def init_db():
             ]
             c.executemany("""INSERT INTO recurring_expenses(name,category,currency,amount,frequency,due_day,variable_amount,image_path,active,notes)
                              VALUES(?,?,?,?,?,?,?,?,?,?)""", seed)
+        # Seguro de auto Latino Seguros: se agrega aunque la base ya exista.
+        if c.execute("SELECT COUNT(*) FROM recurring_expenses WHERE name='Latino Seguros - Auto'").fetchone()[0] == 0:
+            c.execute("""INSERT INTO recurring_expenses(
+                name,category,currency,amount,frequency,due_day,variable_amount,image_path,active,notes,
+                next_due_date,coverage_start,coverage_end,policy_end,subsequent_amount
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(
+                "Latino Seguros - Auto","Seguro de auto","MXN",3486.00,"quarterly",29,0,
+                "assets/latino_seguros.png",1,
+                "Primer pago realizado por $3,486 MXN. Cobertura inicial del 29/07/2026 al 29/10/2026. "
+                "Los pagos subsecuentes son de $2,673.95 MXN. Póliza con vigencia de un año.",
+                "2026-10-29","2026-07-29","2026-10-29","2027-07-29",2673.95
+            ))
+            insurance_id = c.execute("SELECT id FROM recurring_expenses WHERE name='Latino Seguros - Auto'").fetchone()[0]
+            c.execute("""INSERT INTO expense_payments(expense_id,amount,currency,payment_date,period_year,period_month,note)
+                         VALUES(?,?,?,?,?,?,?)""",(
+                insurance_id,3486.00,"MXN","2026-07-29",2026,7,
+                "Primer pago de póliza. Cobertura 29/07/2026 a 29/10/2026."
+            ))
+
         c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('mxn_per_usd','18.50')")
         c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('debt_goal_start','92664.81')")
         c.commit()
@@ -317,6 +402,32 @@ def compact_image_html(relpath, fallback, wrapper='commitment-logo'):
 
 def debts(): return rows("SELECT * FROM debts WHERE active=1 ORDER BY priority,id")
 def recurring(): return rows("SELECT * FROM recurring_expenses WHERE active=1 ORDER BY due_day,id")
+
+def parse_iso_date(value):
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except Exception:
+        return None
+
+def commitment_status(r):
+    """Estado visual de un compromiso, incluyendo pagos trimestrales con fecha exacta."""
+    next_due = parse_iso_date(r.get("next_due_date"))
+    if next_due:
+        days = (next_due - date.today()).days
+        if days < 0:
+            return f"Vencido hace {abs(days)} días", "bad"
+        if days <= 7:
+            return f"Próximo pago en {days} días", "warn" if days > 2 else "bad"
+        return f"Próximo pago: {next_due.strftime('%d/%m/%Y')}", "good"
+    due = due_date(r.get("due_day"))
+    days = (due - date.today()).days
+    if days < 0:
+        return f"Vencido hace {abs(days)} días", "bad"
+    if days <= 7:
+        return f"Vence en {days} días", "warn" if days > 2 else "bad"
+    return f"Vence día {due.day}", "good"
 
 def debt_paid_map():
     t=date.today()
@@ -388,7 +499,14 @@ st.markdown(f"""
 # ---------------------------
 if st.session_state.nav == "🏠 Resumen":
     rs=recurring()
-    fixed_mxn=sum(float(r["amount"] or 0)*(fx if r["currency"]=="USD" else 1) for r in rs)
+    fixed_mxn=0.0
+    for r in rs:
+        amt=float(r["amount"] or 0)
+        if r.get("frequency")=="quarterly" and r.get("subsequent_amount"):
+            amt=float(r["subsequent_amount"] or amt)/3.0
+        elif r.get("frequency")=="bimonthly":
+            amt=amt/2.0
+        fixed_mxn += amt*(fx if r["currency"]=="USD" else 1)
     daily_month=one("SELECT COALESCE(SUM(amount_mxn),0) total FROM daily_expenses WHERE substr(expense_date,1,7)=?",(date.today().strftime("%Y-%m"),))
     daily_mxn=float(daily_month["total"] or 0) if daily_month else 0
     avg_income_usd=2000+(220*4)
@@ -397,22 +515,51 @@ if st.session_state.nav == "🏠 Resumen":
     st.caption("Haz clic directamente en cada tarjeta para abrir su desglose.")
     m1,m2,m3,m4=st.columns(4)
     with m1:
-        if st.button(f"💳 DEUDA PRINCIPAL\n\n{money(total_debt)}\n\nTarjetas + préstamos  →", key="metric_debt", use_container_width=True):
+        if st.button(f"💳  DEUDA PRINCIPAL\n\n{money(total_debt)}\n\nVer composición completa  ›", key="metric_debt", use_container_width=True):
             st.session_state.selected_debt_id=None
             navigate("💳 Deudas")
     with m2:
-        if st.button(f"📅 PAGO MÍNIMO MENSUAL\n\n{money(minimum_total)}\n\nVer pagos de deuda  →", key="metric_minimum", use_container_width=True):
+        if st.button(f"📅  PAGO MÍNIMO MENSUAL\n\n{money(minimum_total)}\n\nRevisar próximos pagos  ›", key="metric_minimum", use_container_width=True):
             navigate("📅 Pagos")
     with m3:
-        if st.button(f"🧾 COMPROMISOS FIJOS\n\n{money(fixed_mxn)}\n\nVivienda + servicios  →", key="metric_commitments", use_container_width=True):
+        if st.button(f"🧾  COMPROMISOS FIJOS\n\n{money(fixed_mxn)}\n\nVer servicios y obligaciones  ›", key="metric_commitments", use_container_width=True):
             navigate("🧾 Compromisos")
     with m4:
-        if st.button(f"🛒 GASTOS DEL MES\n\n{money(daily_mxn)}\n\nVer movimientos  →", key="metric_daily", use_container_width=True):
+        if st.button(f"🛒  GASTOS DEL MES\n\n{money(daily_mxn)}\n\nAbrir movimientos del mes  ›", key="metric_daily", use_container_width=True):
             navigate("🛒 Gastos diarios")
     st.caption(f"💵 Ingreso promedio estimado: US${avg_income_usd:,.0f}/mes · Tipo de cambio configurado: {fx:.2f} MXN/USD")
 
-    st.subheader("🎯 Meta: llevar tarjetas y préstamos a $0")
-    st.progress(progress,text=f"Avance {progress*100:.1f}% · Reducido {money(paid_total)} · Restante {money(total_debt)}")
+    st.markdown("<div class='section-title'>🎯 Meta principal · Liquidar tarjetas y préstamos</div>", unsafe_allow_html=True)
+    goal_pct = progress * 100
+    st.markdown(f"""
+    <div class="goal-shell">
+      <div class="goal-ring" style="--p:{goal_pct:.2f}">
+        <div class="goal-ring-content">
+          <div class="goal-percent">{goal_pct:.1f}%</div>
+          <div class="goal-label">completado</div>
+        </div>
+      </div>
+      <div class="goal-copy">
+        <h3>Camino hacia una deuda de $0</h3>
+        <p>Cada actualización de saldo o pago registrado mueve automáticamente tu progreso.</p>
+        <div class="goal-stats">
+          <div class="goal-stat">
+            <div class="goal-stat-label">Deuda inicial</div>
+            <div class="goal-stat-value">{money(goal)}</div>
+          </div>
+          <div class="goal-stat">
+            <div class="goal-stat-label">Has reducido</div>
+            <div class="goal-stat-value">{money(paid_total)}</div>
+          </div>
+          <div class="goal-stat">
+            <div class="goal-stat-label">Falta por liquidar</div>
+            <div class="goal-stat-value">{money(total_debt)}</div>
+          </div>
+        </div>
+        <div class="goal-message">{"🏆 Ya liquidaste todas tus deudas principales." if total_debt <= 0.01 else "💪 Tu objetivo sigue activo. Cada peso que baja el saldo cuenta."}</div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.markdown("<div class='section-title'>Mis tarjetas y préstamos</div>",unsafe_allow_html=True)
     cols=st.columns(3)
@@ -569,8 +716,16 @@ elif st.session_state.nav == "🧾 Compromisos":
     st.subheader("🧾 Mis compromisos fijos")
     st.caption("Vivienda, servicios y suscripciones con sus logos. Cada tarjeta te muestra monto, vencimiento y estado del pago del mes.")
     rs=recurring(); t=date.today()
-    total_fixed=sum(float(r["amount"] or 0)*(fx if r["currency"]=="USD" else 1) for r in rs)
-    st.metric("Total mensual aproximado",money(total_fixed))
+    # Promedio mensual: trimestrales se prorratean entre 3 para no inflar el total del mes.
+    total_fixed=0.0
+    for r in rs:
+        amt=float(r["amount"] or 0)
+        if r.get("frequency")=="quarterly" and r.get("subsequent_amount"):
+            amt=float(r["subsequent_amount"] or amt)/3.0
+        elif r.get("frequency")=="bimonthly":
+            amt=amt/2.0
+        total_fixed += amt*(fx if r["currency"]=="USD" else 1)
+    st.metric("Compromisos promedio por mes",money(total_fixed))
 
     categories={}
     for r in rs:
@@ -581,16 +736,20 @@ elif st.session_state.nav == "🧾 Compromisos":
         cols=st.columns(3)
         for i,r in enumerate(items):
             paid_now=expmap.get(r["id"],0)>0
+            status_text,status_cls=commitment_status(r)
+            display_amount = float(r["subsequent_amount"] or r["amount"] or 0) if r.get("next_due_date") else float(r["amount"] or 0)
             with cols[i%3]:
                 logo=compact_image_html(r.get("image_path"),r["name"],"commitment-logo")
-                status_html = "<span class='badge good'>✅ Pagado este mes</span>" if paid_now else "<span class='badge warn'>⏳ Pendiente</span>"
+                status_html = f"<span class='badge {status_cls}'>{status_text}</span>"
+                due_text = r.get("next_due_date") or (("día "+str(r["due_day"])) if r["due_day"] else r["frequency"])
+                freq_label = {"monthly":"Mensual","bimonthly":"Bimestral","quarterly":"Trimestral"}.get(r["frequency"],r["frequency"])
                 st.markdown(f"""
                 <div class='commitment-card'>
                   {logo}
                   <div class='commitment-name'>{r['name']}</div>
-                  <div class='commitment-amount'>{money(r['amount'],r['currency'])}</div>
-                  <div class='small'>Vence: {('día '+str(r['due_day'])) if r['due_day'] else r['frequency']}</div>
-                  <div class='small'>Frecuencia: {r['frequency']}</div>
+                  <div class='commitment-amount'>{money(display_amount,r['currency'])}</div>
+                  <div class='small'>Próximo vencimiento: {due_text}</div>
+                  <div class='small'>Frecuencia: {freq_label}</div>
                   {status_html}
                 </div>
                 """,unsafe_allow_html=True)
@@ -598,16 +757,39 @@ elif st.session_state.nav == "🧾 Compromisos":
                     st.session_state.selected_commitment_id=r["id"]
                     st.rerun()
                 if st.session_state.selected_commitment_id == r["id"]:
-                    st.info(
-                        f"{r['name']} · {r['category']} · {money(r['amount'],r['currency'])} · "
-                        f"Vence {('día '+str(r['due_day'])) if r['due_day'] else r['frequency']} · "
-                        f"Frecuencia: {r['frequency']}."
-                    )
+                    if r.get("next_due_date"):
+                        st.info(
+                            f"{r['name']} · {r['category']} · Próximo pago {money(r['subsequent_amount'] or r['amount'],r['currency'])} "
+                            f"el {r['next_due_date']} · Cobertura actual {r.get('coverage_start') or '—'} a {r.get('coverage_end') or '—'} · "
+                            f"Póliza vigente hasta {r.get('policy_end') or '—'}."
+                        )
+                    else:
+                        st.info(
+                            f"{r['name']} · {r['category']} · {money(r['amount'],r['currency'])} · "
+                            f"Vence {('día '+str(r['due_day'])) if r['due_day'] else r['frequency']} · "
+                            f"Frecuencia: {r['frequency']}."
+                        )
                     if r.get("notes"):
                         st.caption(r["notes"])
                 if not paid_now:
                     if st.button("Marcar como pagado",key=f"exp_{r['id']}",use_container_width=True):
-                        execute("INSERT INTO expense_payments(expense_id,amount,currency,payment_date,period_year,period_month,note) VALUES(?,?,?,?,?,?,?)",(r["id"],r["amount"],r["currency"],t.isoformat(),t.year,t.month,"Marcado desde Compromisos"))
+                        pay_amount = float(r["subsequent_amount"] or r["amount"] or 0) if r.get("next_due_date") else float(r["amount"] or 0)
+                        execute("INSERT INTO expense_payments(expense_id,amount,currency,payment_date,period_year,period_month,note) VALUES(?,?,?,?,?,?,?)",
+                                (r["id"],pay_amount,r["currency"],t.isoformat(),t.year,t.month,"Marcado desde Compromisos"))
+                        if r.get("frequency")=="quarterly" and r.get("next_due_date"):
+                            from datetime import timedelta
+                            old_due=parse_iso_date(r["next_due_date"])
+                            if old_due:
+                                # Avance trimestral conservando el día 29 cuando sea posible.
+                                month=old_due.month+3
+                                year=old_due.year+(month-1)//12
+                                month=(month-1)%12+1
+                                last=calendar.monthrange(year,month)[1]
+                                new_due=date(year,month,min(old_due.day,last))
+                                execute("""UPDATE recurring_expenses
+                                           SET coverage_start=?,coverage_end=?,next_due_date=?,amount=?
+                                           WHERE id=?""",
+                                        (old_due.isoformat(),new_due.isoformat(),new_due.isoformat(),pay_amount,r["id"]))
                         st.rerun()
                 else:
                     st.success("Pago registrado")
