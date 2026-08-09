@@ -486,23 +486,59 @@ def parse_iso_date(value):
     except Exception:
         return None
 
+def add_months(base_date, months, preferred_day=None):
+    month_index = base_date.month - 1 + months
+    year = base_date.year + month_index // 12
+    month = month_index % 12 + 1
+    day = preferred_day or base_date.day
+    last = calendar.monthrange(year, month)[1]
+    return date(year, month, min(day, last))
+
+def latest_expense_payment(expense_id):
+    return one("""SELECT payment_date,amount,currency
+                  FROM expense_payments
+                  WHERE expense_id=?
+                  ORDER BY payment_date DESC,id DESC
+                  LIMIT 1""",(expense_id,))
+
+def next_commitment_due(r):
+    """Calcula la siguiente fecha real tomando en cuenta el último pago registrado."""
+    explicit = parse_iso_date(r.get("next_due_date"))
+    if explicit:
+        return explicit
+
+    today = date.today()
+    day = int(r.get("due_day") or calendar.monthrange(today.year,today.month)[1])
+    latest = latest_expense_payment(r["id"])
+
+    if latest:
+        paid_date = parse_iso_date(latest.get("payment_date"))
+        if paid_date:
+            freq = r.get("frequency")
+            months = 1 if freq == "monthly" else 2 if freq == "bimonthly" else 3 if freq == "quarterly" else 1
+            candidate = add_months(paid_date, months, day)
+            # Si el pago se registró anticipadamente, nunca retrocedemos a una fecha anterior al pago.
+            if candidate <= paid_date:
+                candidate = add_months(candidate, months, day)
+            return candidate
+
+    candidate = date(today.year, today.month, min(day, calendar.monthrange(today.year,today.month)[1]))
+    return candidate
+
 def commitment_status(r):
-    """Estado visual de un compromiso, incluyendo pagos trimestrales con fecha exacta."""
-    next_due = parse_iso_date(r.get("next_due_date"))
-    if next_due:
-        days = (next_due - date.today()).days
-        if days < 0:
-            return f"Vencido hace {abs(days)} días", "bad"
-        if days <= 7:
-            return f"Próximo pago en {days} días", "warn" if days > 2 else "bad"
-        return f"Próximo pago: {next_due.strftime('%d/%m/%Y')}", "good"
-    due = due_date(r.get("due_day"))
+    due = next_commitment_due(r)
+    if not due:
+        return "Sin fecha programada", "warn", None
     days = (due - date.today()).days
     if days < 0:
-        return f"Vencido hace {abs(days)} días", "bad"
+        return f"Vencido hace {abs(days)} días", "bad", due
+    if days == 0:
+        return "Vence hoy", "bad", due
+    if days <= 3:
+        return f"Vence en {days} días", "bad", due
     if days <= 7:
-        return f"Vence en {days} días", "warn" if days > 2 else "bad"
-    return f"Vence día {due.day}", "good"
+        return f"Vence en {days} días", "warn", due
+    return f"Próximo pago en {days} días", "good", due
 
 def debt_paid_map():
     t=date.today()
@@ -551,6 +587,60 @@ if st.sidebar.button("↪ Cerrar sesión", use_container_width=True):
     st.session_state.authenticated=False
     st.session_state.pop("user",None)
     st.rerun()
+
+
+st.markdown("""
+<style>
+/* ===== V7: BARRA LATERAL LEGIBLE, ESTILO BANCA ===== */
+[data-testid="stSidebar"]{
+  background:linear-gradient(180deg,#061d38 0%,#08284c 55%,#061d38 100%)!important;
+  border-right:1px solid #123b67!important;
+}
+[data-testid="stSidebar"] .stMarkdown h2{
+  color:#ffffff!important;
+  font-size:1.35rem!important;
+  font-weight:900!important;
+  margin-bottom:.15rem!important;
+}
+[data-testid="stSidebar"] .stCaptionContainer,
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p{
+  color:#bcd2ea!important;
+}
+[data-testid="stSidebar"] .stMarkdown p,
+[data-testid="stSidebar"] .stMarkdown strong{
+  color:#ffffff!important;
+  font-size:1.02rem!important;
+}
+[data-testid="stSidebar"] .stButton > button{
+  background:#ffffff!important;
+  border:1px solid rgba(255,255,255,.92)!important;
+  color:#0b2c52!important;
+  min-height:58px!important;
+  border-radius:16px!important;
+  padding:.78rem 1rem!important;
+  box-shadow:0 6px 16px rgba(0,0,0,.13)!important;
+  justify-content:flex-start!important;
+  text-align:left!important;
+  transition:all .15s ease!important;
+}
+[data-testid="stSidebar"] .stButton > button p,
+[data-testid="stSidebar"] .stButton > button span{
+  color:#0b2c52!important;
+  font-size:1.03rem!important;
+  font-weight:850!important;
+  opacity:1!important;
+}
+[data-testid="stSidebar"] .stButton > button:hover{
+  background:#eaf4ff!important;
+  border-color:#8fc7ff!important;
+  transform:translateX(3px)!important;
+  box-shadow:0 8px 18px rgba(0,0,0,.17)!important;
+}
+[data-testid="stSidebar"] hr{
+  border-color:rgba(255,255,255,.13)!important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 fx=float(setting("mxn_per_usd","18.50"))
 goal=float(setting("debt_goal_start","92664.81"))
@@ -660,6 +750,28 @@ if st.session_state.nav == "🏠 Resumen":
       </div>
     </div>
     """, unsafe_allow_html=True)
+
+    st.markdown("<div class='section-title'>🔔 Próximos compromisos importantes</div>", unsafe_allow_html=True)
+    upcoming_commitments=[]
+    for rr in rs:
+        stxt,scls,sdue=commitment_status(rr)
+        if sdue:
+            amt=float(rr["subsequent_amount"] or rr["amount"] or 0) if rr.get("next_due_date") else float(rr["amount"] or 0)
+            upcoming_commitments.append((sdue,rr,amt,stxt,scls))
+    upcoming_commitments.sort(key=lambda x:x[0])
+    uc=st.columns(4)
+    for j,(sdue,rr,amt,stxt,scls) in enumerate(upcoming_commitments[:4]):
+        with uc[j%4]:
+            st.markdown(f"""
+            <div class='commitment-card' style='min-height:245px'>
+              {compact_image_html(rr.get('image_path'),rr['name'],'commitment-logo')}
+              <div class='commitment-name'>{rr['name']}</div>
+              <div class='small'>Próximo pago</div>
+              <div class='commitment-amount'>{money(amt,rr['currency'])}</div>
+              <div class='small'>{sdue.strftime('%d/%m/%Y')}</div>
+              <span class='badge {scls}'>{stxt}</span>
+            </div>
+            """,unsafe_allow_html=True)
 
     st.markdown("<div class='section-title'>Mis tarjetas y préstamos</div>",unsafe_allow_html=True)
     cols=st.columns(3)
@@ -836,12 +948,16 @@ elif st.session_state.nav == "🧾 Compromisos":
         cols=st.columns(3)
         for i,r in enumerate(items):
             paid_now=expmap.get(r["id"],0)>0
-            status_text,status_cls=commitment_status(r)
+            status_text,status_cls,next_due_calc=commitment_status(r)
             display_amount = float(r["subsequent_amount"] or r["amount"] or 0) if r.get("next_due_date") else float(r["amount"] or 0)
             with cols[i%3]:
                 logo=compact_image_html(r.get("image_path"),r["name"],"commitment-logo")
                 status_html = f"<span class='badge {status_cls}'>{status_text}</span>"
-                due_text = r.get("next_due_date") or (("día "+str(r["due_day"])) if r["due_day"] else r["frequency"])
+                due_text = next_due_calc.strftime("%d/%m/%Y") if next_due_calc else "Sin fecha"
+                latest_payment = latest_expense_payment(r["id"])
+                paid_hint = ""
+                if latest_payment:
+                    paid_hint = f"<div class='small' style='margin-top:7px;color:#168356;font-weight:800'>✅ Último pago: {latest_payment['payment_date']}</div>"
                 freq_label = {"monthly":"Mensual","bimonthly":"Bimestral","quarterly":"Trimestral"}.get(r["frequency"],r["frequency"])
                 st.markdown(f"""
                 <div class='commitment-card'>
@@ -851,6 +967,7 @@ elif st.session_state.nav == "🧾 Compromisos":
                   <div class='small'>Próximo vencimiento: {due_text}</div>
                   <div class='small'>Frecuencia: {freq_label}</div>
                   {status_html}
+                  {paid_hint}
                 </div>
                 """,unsafe_allow_html=True)
                 if st.button("Ver detalle",key=f"commit_detail_{r['id']}",use_container_width=True):
@@ -864,33 +981,29 @@ elif st.session_state.nav == "🧾 Compromisos":
                             f"Póliza vigente hasta {r.get('policy_end') or '—'}."
                         )
                     else:
+                        _,_,detail_due = commitment_status(r)
+                        detail_due_text = detail_due.strftime("%d/%m/%Y") if detail_due else "Sin fecha"
                         st.info(
                             f"{r['name']} · {r['category']} · {money(r['amount'],r['currency'])} · "
-                            f"Vence {('día '+str(r['due_day'])) if r['due_day'] else r['frequency']} · "
-                            f"Frecuencia: {r['frequency']}."
+                            f"Próximo vencimiento {detail_due_text} · Frecuencia: {r['frequency']}."
                         )
                     if r.get("notes"):
                         st.caption(r["notes"])
-                if not paid_now:
-                    if st.button("Marcar como pagado",key=f"exp_{r['id']}",use_container_width=True):
-                        pay_amount = float(r["subsequent_amount"] or r["amount"] or 0) if r.get("next_due_date") else float(r["amount"] or 0)
-                        execute("INSERT INTO expense_payments(expense_id,amount,currency,payment_date,period_year,period_month,note) VALUES(?,?,?,?,?,?,?)",
-                                (r["id"],pay_amount,r["currency"],t.isoformat(),t.year,t.month,"Marcado desde Compromisos"))
-                        if r.get("frequency")=="quarterly" and r.get("next_due_date"):
-                            from datetime import timedelta
-                            old_due=parse_iso_date(r["next_due_date"])
-                            if old_due:
-                                # Avance trimestral conservando el día 29 cuando sea posible.
-                                month=old_due.month+3
-                                year=old_due.year+(month-1)//12
-                                month=(month-1)%12+1
-                                last=calendar.monthrange(year,month)[1]
-                                new_due=date(year,month,min(old_due.day,last))
-                                execute("""UPDATE recurring_expenses
-                                           SET coverage_start=?,coverage_end=?,next_due_date=?,amount=?
-                                           WHERE id=?""",
-                                        (old_due.isoformat(),new_due.isoformat(),new_due.isoformat(),pay_amount,r["id"]))
-                        st.rerun()
+                button_label = "✅ Pago registrado este mes" if paid_now else "Marcar como pagado"
+                if st.button(button_label,key=f"exp_{r['id']}",use_container_width=True,disabled=paid_now):
+                    pay_amount = float(r["subsequent_amount"] or r["amount"] or 0) if r.get("next_due_date") else float(r["amount"] or 0)
+                    execute("INSERT INTO expense_payments(expense_id,amount,currency,payment_date,period_year,period_month,note) VALUES(?,?,?,?,?,?,?)",
+                            (r["id"],pay_amount,r["currency"],t.isoformat(),t.year,t.month,"Marcado desde Compromisos"))
+                    if r.get("frequency")=="quarterly" and r.get("next_due_date"):
+                        old_due=parse_iso_date(r["next_due_date"])
+                        if old_due:
+                            new_due=add_months(old_due,3,old_due.day)
+                            execute("""UPDATE recurring_expenses
+                                       SET coverage_start=?,coverage_end=?,next_due_date=?,amount=?
+                                       WHERE id=?""",
+                                    (old_due.isoformat(),new_due.isoformat(),new_due.isoformat(),pay_amount,r["id"]))
+                    st.success("Pago registrado. El próximo vencimiento ya fue actualizado.")
+                    st.rerun()
                 else:
                     st.success("Pago registrado")
                 if r.get("notes"):
