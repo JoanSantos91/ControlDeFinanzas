@@ -1,16 +1,13 @@
-# Control de Finanzas — Streamlit V5
+# Control de Finanzas — Streamlit V6
 
-Mejoras V5:
-- Meta principal mucho más visual con indicador circular de progreso.
-- Botones del resumen más claros y con lenguaje tipo banca.
-- Latino Seguros agregado como compromiso trimestral.
-- Primer pago de $3,486 MXN registrado el 29/07/2026.
-- Cobertura inicial 29/07/2026–29/10/2026.
-- Próximos pagos de $2,673.95 MXN cada trimestre.
-- Póliza vigente hasta 29/07/2027.
-- Alertas de próximo vencimiento para compromisos con fecha exacta.
-- Logos visibles en los compromisos.
-- Compatible con el archivo SQLite ya existente: agrega las columnas nuevas automáticamente.
+Esta versión conserva la navegación lateral de V5 tal como estaba.
+
+Cambio principal:
+- Rediseño únicamente de las cuatro tarjetas del panorama financiero:
+  Deuda principal, Pago mínimo mensual, Compromisos fijos y Gastos del mes.
+- Mantienen el clic y navegación que ya funcionaban.
+- Tarjetas más grandes, diferenciadas por color, con mejor jerarquía visual y aspecto bancario.
+- Se conservan la meta visual y Latino Seguros de V5.
 
 Secrets:
 [auth]

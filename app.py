@@ -130,6 +130,81 @@ button[kind="secondary"]:hover{
   .goal-stats{grid-template-columns:1fr}
 }
 
+
+/* ===== V6: TARJETAS DEL RESUMEN ===== */
+.summary-card-label{
+  font-size:.77rem;
+  font-weight:900;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  margin-bottom:2px;
+}
+.st-key-summary_debt button,
+.st-key-summary_minimum button,
+.st-key-summary_commitments button,
+.st-key-summary_daily button{
+  min-height:158px!important;
+  border-radius:24px!important;
+  padding:18px 20px!important;
+  text-align:left!important;
+  justify-content:flex-start!important;
+  align-items:flex-start!important;
+  white-space:pre-line!important;
+  border-width:1px!important;
+  box-shadow:0 10px 26px rgba(25,56,94,.08)!important;
+  transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease!important;
+}
+.st-key-summary_debt button p,
+.st-key-summary_minimum button p,
+.st-key-summary_commitments button p,
+.st-key-summary_daily button p{
+  width:100%!important;
+  text-align:left!important;
+  font-size:1.03rem!important;
+  line-height:1.48!important;
+  font-weight:760!important;
+  color:#13233a!important;
+}
+.st-key-summary_debt button:hover,
+.st-key-summary_minimum button:hover,
+.st-key-summary_commitments button:hover,
+.st-key-summary_daily button:hover{
+  transform:translateY(-3px)!important;
+  box-shadow:0 16px 34px rgba(20,70,130,.13)!important;
+}
+.st-key-summary_debt button{
+  background:linear-gradient(145deg,#ffffff 0%,#edf5ff 100%)!important;
+  border-color:#b9d6fb!important;
+  border-top:5px solid #1463d6!important;
+}
+.st-key-summary_minimum button{
+  background:linear-gradient(145deg,#ffffff 0%,#f2efff 100%)!important;
+  border-color:#d5cafa!important;
+  border-top:5px solid #7957d5!important;
+}
+.st-key-summary_commitments button{
+  background:linear-gradient(145deg,#ffffff 0%,#eefaf4 100%)!important;
+  border-color:#bfe7d1!important;
+  border-top:5px solid #168356!important;
+}
+.st-key-summary_daily button{
+  background:linear-gradient(145deg,#ffffff 0%,#fff7e8 100%)!important;
+  border-color:#f2dab1!important;
+  border-top:5px solid #d98b18!important;
+}
+.st-key-summary_debt button p::first-line,
+.st-key-summary_minimum button p::first-line,
+.st-key-summary_commitments button p::first-line,
+.st-key-summary_daily button p::first-line{
+  font-weight:900!important;
+}
+@media(max-width:900px){
+  .st-key-summary_debt button,
+  .st-key-summary_minimum button,
+  .st-key-summary_commitments button,
+  .st-key-summary_daily button{min-height:140px!important}
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -512,21 +587,46 @@ if st.session_state.nav == "🏠 Resumen":
     avg_income_usd=2000+(220*4)
 
     st.markdown("### Tu panorama financiero")
-    st.caption("Haz clic directamente en cada tarjeta para abrir su desglose.")
-    m1,m2,m3,m4=st.columns(4)
+    st.caption("Haz clic en cualquiera de las tarjetas para abrir el detalle completo.")
+    m1,m2,m3,m4=st.columns(4, gap="medium")
+
     with m1:
-        if st.button(f"💳  DEUDA PRINCIPAL\n\n{money(total_debt)}\n\nVer composición completa  ›", key="metric_debt", use_container_width=True):
-            st.session_state.selected_debt_id=None
-            navigate("💳 Deudas")
+        with st.container(key="summary_debt"):
+            if st.button(
+                f"💳  DEUDA PRINCIPAL\n\n{money(total_debt)}\n\nTarjetas + préstamos\nVer composición  ›",
+                key="metric_debt",
+                use_container_width=True
+            ):
+                st.session_state.selected_debt_id=None
+                navigate("💳 Deudas")
+
     with m2:
-        if st.button(f"📅  PAGO MÍNIMO MENSUAL\n\n{money(minimum_total)}\n\nRevisar próximos pagos  ›", key="metric_minimum", use_container_width=True):
-            navigate("📅 Pagos")
+        with st.container(key="summary_minimum"):
+            if st.button(
+                f"📅  PAGO MÍNIMO MENSUAL\n\n{money(minimum_total)}\n\nCompromiso de deuda\nRevisar pagos  ›",
+                key="metric_minimum",
+                use_container_width=True
+            ):
+                navigate("📅 Pagos")
+
     with m3:
-        if st.button(f"🧾  COMPROMISOS FIJOS\n\n{money(fixed_mxn)}\n\nVer servicios y obligaciones  ›", key="metric_commitments", use_container_width=True):
-            navigate("🧾 Compromisos")
+        with st.container(key="summary_commitments"):
+            if st.button(
+                f"🧾  COMPROMISOS FIJOS\n\n{money(fixed_mxn)}\n\nVivienda + servicios\nVer obligaciones  ›",
+                key="metric_commitments",
+                use_container_width=True
+            ):
+                navigate("🧾 Compromisos")
+
     with m4:
-        if st.button(f"🛒  GASTOS DEL MES\n\n{money(daily_mxn)}\n\nAbrir movimientos del mes  ›", key="metric_daily", use_container_width=True):
-            navigate("🛒 Gastos diarios")
+        with st.container(key="summary_daily"):
+            if st.button(
+                f"🛒  GASTOS DEL MES\n\n{money(daily_mxn)}\n\nMovimientos registrados\nAbrir gastos  ›",
+                key="metric_daily",
+                use_container_width=True
+            ):
+                navigate("🛒 Gastos diarios")
+
     st.caption(f"💵 Ingreso promedio estimado: US${avg_income_usd:,.0f}/mes · Tipo de cambio configurado: {fx:.2f} MXN/USD")
 
     st.markdown("<div class='section-title'>🎯 Meta principal · Liquidar tarjetas y préstamos</div>", unsafe_allow_html=True)
