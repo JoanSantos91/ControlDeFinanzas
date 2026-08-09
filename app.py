@@ -25,72 +25,62 @@ st.set_page_config(
 st.markdown("""
 <style>
 :root{
-  --bg:#f6f8fb;
-  --panel:#ffffff;
-  --card:#ffffff;
-  --line:#dde5ef;
-  --text:#132238;
-  --muted:#69778a;
-  --accent:#1769e0;
-  --accent-soft:#eaf2ff;
-  --good:#198754;
-  --good-soft:#eaf8f1;
-  --warn:#a56a00;
-  --warn-soft:#fff7df;
-  --bad:#c33a4a;
-  --bad-soft:#fff0f2;
+  --navy:#08264a;--blue:#1463d6;--bg:#f4f7fb;--line:#dbe4ef;--text:#12233a;
+  --muted:#617189;--good:#168356;--good-soft:#e9f8f1;--warn:#9b6500;--warn-soft:#fff6dc;
+  --bad:#c03446;--bad-soft:#fff0f2;
 }
 html,body,[class*="css"]{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-.stApp{background:var(--bg);color:var(--text)}
-.block-container{max-width:1480px;padding-top:1.15rem;padding-bottom:4rem}
-[data-testid="stSidebar"]{background:#fff;border-right:1px solid var(--line)}
-[data-testid="stSidebar"] *{color:var(--text)}
-h1,h2,h3,h4,p,span,label{color:var(--text)}
-.hero{background:#fff;border:1px solid var(--line);border-radius:24px;padding:24px 26px;margin-bottom:16px;box-shadow:0 8px 26px rgba(23,42,69,.06)}
-.kicker{color:var(--accent);font-size:.78rem;font-weight:850;letter-spacing:.15em;text-transform:uppercase}
-.hero-title{font-size:2rem;font-weight:900;margin:.22rem 0 .35rem;color:var(--text)}
-.hero-sub{color:var(--muted);font-size:.96rem}
-.metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:14px 0 16px}
-.metric-card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:17px;min-height:112px;box-shadow:0 6px 18px rgba(23,42,69,.045)}
-.metric-label{font-size:.77rem;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.045em}
-.metric-value{font-size:1.48rem;font-weight:900;margin-top:7px;color:var(--text)}
-.metric-note{font-size:.78rem;color:var(--muted);margin-top:5px}
-.section-title{font-size:1.16rem;font-weight:900;margin:22px 0 10px;color:var(--text)}
-.debt-card{background:#fff;border:1px solid var(--line);border-radius:22px;padding:15px;min-height:306px;box-shadow:0 7px 20px rgba(23,42,69,.045)}
-.logo{height:92px;border-radius:15px;background:#fff;display:flex;align-items:center;justify-content:center;padding:8px;margin-bottom:12px;border:1px solid #edf1f5}
-.logo img{max-width:100%;max-height:76px;object-fit:contain}
-.logo-fallback{height:92px;border:1px dashed var(--line);border-radius:15px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;font-weight:900;color:var(--text)}
-.debt-name{font-size:1.02rem;font-weight:900;color:var(--text)}
-.debt-value{font-size:1.52rem;font-weight:900;margin:4px 0;color:var(--text)}
-.small{font-size:.80rem;color:var(--muted)}
-.badge{display:inline-flex;border-radius:999px;padding:5px 9px;font-size:.72rem;font-weight:850;margin-top:8px}
+.stApp{background:linear-gradient(180deg,#f9fbfe 0%,#f3f6fb 100%);color:var(--text)}
+.block-container{max-width:1500px;padding-top:1.25rem;padding-bottom:4rem}
+[data-testid="stSidebar"]{background:linear-gradient(180deg,#071f3b 0%,#0a2a50 100%);border-right:none}
+[data-testid="stSidebar"] *{color:#f7fbff}
+[data-testid="stSidebar"] .stButton>button{
+  width:100%;background:transparent;color:#eef6ff;border:1px solid rgba(255,255,255,.10);
+  border-radius:14px;font-size:1rem;font-weight:800;padding:.72rem .85rem;text-align:left
+}
+[data-testid="stSidebar"] .stButton>button:hover{background:rgba(255,255,255,.10);border-color:rgba(255,255,255,.25);color:#fff}
+h1{font-size:2.25rem!important;font-weight:900!important;color:var(--text)!important}
+h2{font-size:1.65rem!important;font-weight:900!important;color:var(--text)!important}
+h3{font-size:1.35rem!important;font-weight:850!important;color:var(--text)!important}
+p,span,label{font-size:1rem}
+.hero{background:linear-gradient(135deg,#08264a 0%,#104d8f 100%);border-radius:26px;padding:28px 30px;margin-bottom:18px;box-shadow:0 16px 38px rgba(8,38,74,.16)}
+.kicker{color:#9fd0ff;font-size:.86rem;font-weight:850;letter-spacing:.15em;text-transform:uppercase}
+.hero-title{font-size:2.35rem;font-weight:950;margin:.25rem 0 .35rem;color:white!important}
+.hero-sub{color:#dcecff;font-size:1.05rem;max-width:920px}
+.hero-user{display:inline-flex;margin-top:14px;padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.12);color:white;font-size:.88rem;font-weight:750}
+.debt-card{background:#fff;border:1px solid var(--line);border-radius:24px;padding:17px;min-height:320px;box-shadow:0 9px 26px rgba(28,57,91,.06)}
+.logo{height:102px;border-radius:17px;background:#fff;display:flex;align-items:center;justify-content:center;padding:9px;margin-bottom:13px;border:1px solid #edf1f5}
+.logo img{max-width:100%;max-height:84px;object-fit:contain}
+.logo-fallback{height:102px;border:1px dashed var(--line);border-radius:17px;display:flex;align-items:center;justify-content:center;margin-bottom:13px;font-weight:900;color:var(--navy);font-size:1.1rem}
+.debt-name{font-size:1.15rem;font-weight:900;color:var(--navy)}
+.debt-value{font-size:1.72rem;font-weight:950;margin:5px 0;color:var(--text)}
+.small{font-size:.90rem;color:var(--muted);line-height:1.45}
+.badge{display:inline-flex;border-radius:999px;padding:6px 10px;font-size:.80rem;font-weight:850;margin-top:9px}
 .good{background:var(--good-soft);color:var(--good)}.warn{background:var(--warn-soft);color:var(--warn)}.bad{background:var(--bad-soft);color:var(--bad)}
-.progress-track{height:10px;border-radius:999px;background:#e9eef5;overflow:hidden;margin-top:11px}
-.progress-fill{height:100%;background:var(--accent);border-radius:999px}
-.payline{display:grid;grid-template-columns:1.45fr .85fr .9fr .8fr;gap:10px;align-items:center;border:1px solid var(--line);background:#fff;border-radius:15px;padding:11px;margin:7px 0}
-.info-box{background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px;margin-bottom:12px}
-.commitment-card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:14px;box-shadow:0 6px 18px rgba(23,42,69,.04);margin-bottom:12px;min-height:260px}
-.commitment-logo{height:82px;border-radius:14px;background:#fff;border:1px solid #edf1f5;display:flex;align-items:center;justify-content:center;padding:8px;margin-bottom:10px}
-.commitment-logo img{max-height:66px;max-width:100%;object-fit:contain}
-.commitment-fallback{height:82px;border-radius:14px;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;margin-bottom:10px;font-weight:900;color:var(--text)}
-.commitment-name{font-size:1rem;font-weight:900;color:var(--text)}
-.commitment-amount{font-size:1.3rem;font-weight:900;color:var(--text);margin:3px 0}
-.payment-logo-row{display:grid;grid-template-columns:74px 1.5fr .8fr .8fr .85fr;gap:10px;align-items:center;border:1px solid var(--line);background:#fff;border-radius:16px;padding:10px 12px;margin:8px 0}
-.payment-logo-box{width:64px;height:54px;border:1px solid #edf1f5;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;padding:5px;overflow:hidden}
-.payment-logo-box img{max-width:100%;max-height:44px;object-fit:contain}
-.login-wrap{max-width:460px;margin:8vh auto 0;background:white;border:1px solid var(--line);border-radius:26px;padding:26px;box-shadow:0 16px 42px rgba(23,42,69,.08)}
-.login-title{text-align:center;font-size:1.65rem;font-weight:900;margin-bottom:4px}
-.login-sub{text-align:center;color:var(--muted);margin-bottom:18px}
-/* native widgets */
-.stButton>button{border-radius:12px;border:1px solid #cfd9e7;background:#fff;color:var(--text);font-weight:750}
-.stButton>button:hover{border-color:var(--accent);color:var(--accent)}
-.stButton>button[kind="primary"]{background:var(--accent);color:#fff;border-color:var(--accent)}
-[data-testid="stMetric"]{background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px}
-[data-testid="stMetricLabel"]{color:var(--muted)}
-[data-testid="stMetricValue"]{color:var(--text)}
-[data-testid="stDataFrame"]{background:#fff}
+.progress-track{height:11px;border-radius:999px;background:#e8eef6;overflow:hidden;margin-top:12px}
+.progress-fill{height:100%;background:linear-gradient(90deg,#1463d6,#36a6ff);border-radius:999px}
+.section-title{font-size:1.35rem;font-weight:900;margin:24px 0 12px;color:var(--navy)}
+.commitment-card{background:#fff;border:1px solid var(--line);border-radius:22px;padding:16px;box-shadow:0 8px 22px rgba(28,57,91,.05);margin-bottom:12px;min-height:275px}
+.commitment-logo{height:92px;border-radius:15px;background:#fff;border:1px solid #edf1f5;display:flex;align-items:center;justify-content:center;padding:8px;margin-bottom:11px}
+.commitment-logo img{max-height:74px;max-width:100%;object-fit:contain}
+.commitment-fallback{height:92px;border-radius:15px;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;margin-bottom:11px;font-weight:900;color:var(--navy)}
+.commitment-name{font-size:1.08rem;font-weight:900;color:var(--navy)}
+.commitment-amount{font-size:1.45rem;font-weight:950;color:var(--text);margin:4px 0}
+.login-shell{max-width:520px;margin:7vh auto 0;background:#fff;border:1px solid var(--line);border-radius:30px;overflow:hidden;box-shadow:0 24px 60px rgba(8,38,74,.13)}
+.login-head{padding:28px 30px 24px;background:linear-gradient(135deg,#08264a,#135ba6);color:white}
+.login-head-title{font-size:2rem;font-weight:950;color:white}
+.login-head-sub{font-size:1rem;color:#dbeeff;margin-top:5px}
+.login-user{margin-top:18px;padding:13px 15px;border-radius:15px;background:rgba(255,255,255,.12);font-size:1.05rem;font-weight:850;color:white}
+.stButton>button{border-radius:14px;border:1px solid #cad6e5;background:#fff;color:var(--navy);font-weight:800;font-size:1rem;min-height:48px}
+.stButton>button:hover{border-color:var(--blue);color:var(--blue);background:#f7fbff}
+.stButton>button[kind="primary"]{background:var(--blue);color:#fff;border-color:var(--blue)}
+[data-testid="stMetric"]{background:#fff;border:1px solid var(--line);border-radius:18px;padding:15px;box-shadow:0 6px 18px rgba(28,57,91,.04)}
+[data-testid="stMetricLabel"] p{font-size:.95rem!important;color:var(--muted)!important;font-weight:800!important}
+[data-testid="stMetricValue"]{font-size:1.7rem!important;color:var(--navy)!important;font-weight:900!important}
+div[data-testid="stForm"]{background:#fff;border:1px solid var(--line);border-radius:22px;padding:18px;box-shadow:0 7px 20px rgba(28,57,91,.04)}
+.stButton>button p{font-size:1.02rem!important;line-height:1.38!important}
 @media(max-width:900px){.metric-grid{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:650px){.metric-grid{grid-template-columns:1fr}.payline{grid-template-columns:1fr 1fr}.hero-title{font-size:1.55rem}}
+@media(max-width:650px){.hero-title{font-size:1.8rem}.block-container{padding-left:.8rem;padding-right:.8rem}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -99,33 +89,46 @@ h1,h2,h3,h4,p,span,label{color:var(--text)}
 # ---------------------------
 def auth_config():
     try:
-        username = str(st.secrets["auth"]["username"])
-        password = str(st.secrets["auth"]["password"])
+        auth = st.secrets["auth"]
+        username = str(auth.get("username", "Joan Santos"))
+        password = str(auth["password"])
         return username, password
     except Exception:
-        return None, None
+        return "Joan Santos", None
 
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
     username_cfg, password_cfg = auth_config()
-    st.markdown("<div class='login-wrap'><div class='login-title'>Control de Finanzas</div><div class='login-sub'>Acceso privado</div></div>", unsafe_allow_html=True)
-    if not username_cfg or not password_cfg:
-        st.error("Falta configurar el usuario y la contraseña en Streamlit Secrets.")
+    st.markdown(f"""
+    <div class="login-shell">
+      <div class="login-head">
+        <div class="kicker" style="color:#a8d5ff">Acceso privado</div>
+        <div class="login-head-title">Control de Finanzas</div>
+        <div class="login-head-sub">Tu panel financiero personal</div>
+        <div class="login-user">👤 {username_cfg}</div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+    if not password_cfg:
+        st.error("Falta configurar la contraseña en Streamlit Secrets.")
         st.code('[auth]\nusername = "Joan Santos"\npassword = "TU_CONTRASEÑA"', language="toml")
         st.stop()
-    with st.form("login_form"):
-        u = st.text_input("Usuario")
-        p = st.text_input("Contraseña", type="password")
-        ok = st.form_submit_button("Entrar", use_container_width=True, type="primary")
-    if ok:
-        if u == username_cfg and p == password_cfg:
-            st.session_state.authenticated = True
-            st.session_state.user = u
-            st.rerun()
-        else:
-            st.error("Usuario o contraseña incorrectos.")
+    c1,c2,c3 = st.columns([1,1.15,1])
+    with c2:
+        with st.form("login_form"):
+            st.markdown("### Bienvenido, Joan")
+            st.caption("Tu nombre ya está registrado. Escribe únicamente tu contraseña.")
+            p = st.text_input("Contraseña", type="password", placeholder="••••••••")
+            ok = st.form_submit_button("Entrar a mi cuenta", use_container_width=True, type="primary")
+        if ok:
+            if p == password_cfg:
+                st.session_state.authenticated = True
+                st.session_state.user = username_cfg
+                st.rerun()
+            else:
+                st.error("Contraseña incorrecta.")
     st.stop()
 
 # ---------------------------
@@ -334,19 +337,34 @@ def navigate(page, debt_id=None):
 # ---------------------------
 # NAVIGATION
 # ---------------------------
-PAGES=["🏠 Resumen","💳 Deudas","📅 Pagos","🧾 Compromisos","💵 Ingresos","🛒 Gastos diarios","💾 Respaldo","⚙️ Configuración"]
+PAGES=[
+    ("🏠","Resumen","🏠 Resumen"),
+    ("💳","Deudas","💳 Deudas"),
+    ("📅","Pagos","📅 Pagos"),
+    ("🧾","Compromisos","🧾 Compromisos"),
+    ("💵","Ingresos","💵 Ingresos"),
+    ("🛒","Gastos diarios","🛒 Gastos diarios"),
+    ("💾","Respaldo","💾 Respaldo"),
+    ("⚙️","Configuración","⚙️ Configuración"),
+]
 if "nav" not in st.session_state: st.session_state.nav="🏠 Resumen"
 if "selected_debt_id" not in st.session_state: st.session_state.selected_debt_id=None
+if "selected_commitment_id" not in st.session_state: st.session_state.selected_commitment_id=None
 
-st.sidebar.markdown(f"**Usuario:** {st.session_state.get('user','Joan Santos')}")
-if st.sidebar.button("Cerrar sesión", use_container_width=True):
+st.sidebar.markdown("## 💳 Control de Finanzas")
+st.sidebar.caption("Banca personal · Panel privado")
+st.sidebar.markdown(f"**👤 {st.session_state.get('user','Joan Santos')}**")
+st.sidebar.divider()
+for icon,label,target in PAGES:
+    active = st.session_state.nav == target
+    button_label = f"▸ {icon} {label}" if active else f"{icon} {label}"
+    if st.sidebar.button(button_label, key=f"nav_{target}", use_container_width=True):
+        navigate(target)
+st.sidebar.divider()
+if st.sidebar.button("↪ Cerrar sesión", use_container_width=True):
     st.session_state.authenticated=False
     st.session_state.pop("user",None)
     st.rerun()
-
-page = st.sidebar.radio("Navegación",PAGES,index=PAGES.index(st.session_state.nav),key="nav_radio")
-if page != st.session_state.nav:
-    st.session_state.nav=page
 
 fx=float(setting("mxn_per_usd","18.50"))
 goal=float(setting("debt_goal_start","92664.81"))
@@ -356,11 +374,12 @@ minimum_total=sum(float(d["minimum_payment"] or 0) for d in ds)
 paid_total=max(goal-total_debt,0)
 progress=min(max(paid_total/goal if goal else 0,0),1)
 
-st.markdown("""
+st.markdown(f"""
 <div class="hero">
-  <div class="kicker">Panel personal</div>
+  <div class="kicker">Panel financiero privado</div>
   <div class="hero-title">Control de Finanzas</div>
-  <div class="hero-sub">Prioridad principal: pagar tarjetas y préstamos. Vivienda, servicios, suscripciones y gastos diarios se muestran por separado.</div>
+  <div class="hero-sub">Un solo lugar para controlar deudas, pagos, compromisos, ingresos y gastos, con prioridad en liquidar tarjetas y préstamos.</div>
+  <div class="hero-user">👤 {st.session_state.get("user","Joan Santos")} &nbsp; · &nbsp; Sesión protegida</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -374,22 +393,23 @@ if st.session_state.nav == "🏠 Resumen":
     daily_mxn=float(daily_month["total"] or 0) if daily_month else 0
     avg_income_usd=2000+(220*4)
 
-    st.markdown(f"""
-    <div class="metric-grid">
-      <div class="metric-card"><div class="metric-label">Deuda principal</div><div class="metric-value">{money(total_debt)}</div><div class="metric-note">Tarjetas + préstamos</div></div>
-      <div class="metric-card"><div class="metric-label">Pago mínimo mensual</div><div class="metric-value">{money(minimum_total)}</div><div class="metric-note">Compromiso mínimo de deuda</div></div>
-      <div class="metric-card"><div class="metric-label">Compromisos fijos</div><div class="metric-value">{money(fixed_mxn)}</div><div class="metric-note">Vivienda, servicios y suscripciones</div></div>
-      <div class="metric-card"><div class="metric-label">Gastos diarios del mes</div><div class="metric-value">{money(daily_mxn)}</div><div class="metric-note">Compras y gastos variables registrados</div></div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    b1,b2,b3=st.columns([1,1,1])
-    with b1:
-        if st.button("🔎 Ver de qué se componen mis compromisos",use_container_width=True): navigate("🧾 Compromisos")
-    with b2:
-        if st.button("🛒 Ver de qué se componen mis gastos",use_container_width=True): navigate("🛒 Gastos diarios")
-    with b3:
-        st.caption(f"Ingreso promedio estimado: US${avg_income_usd:,.0f}/mes · Tipo de cambio configurado: {fx:.2f}")
+    st.markdown("### Tu panorama financiero")
+    st.caption("Haz clic directamente en cada tarjeta para abrir su desglose.")
+    m1,m2,m3,m4=st.columns(4)
+    with m1:
+        if st.button(f"💳 DEUDA PRINCIPAL\n\n{money(total_debt)}\n\nTarjetas + préstamos  →", key="metric_debt", use_container_width=True):
+            st.session_state.selected_debt_id=None
+            navigate("💳 Deudas")
+    with m2:
+        if st.button(f"📅 PAGO MÍNIMO MENSUAL\n\n{money(minimum_total)}\n\nVer pagos de deuda  →", key="metric_minimum", use_container_width=True):
+            navigate("📅 Pagos")
+    with m3:
+        if st.button(f"🧾 COMPROMISOS FIJOS\n\n{money(fixed_mxn)}\n\nVivienda + servicios  →", key="metric_commitments", use_container_width=True):
+            navigate("🧾 Compromisos")
+    with m4:
+        if st.button(f"🛒 GASTOS DEL MES\n\n{money(daily_mxn)}\n\nVer movimientos  →", key="metric_daily", use_container_width=True):
+            navigate("🛒 Gastos diarios")
+    st.caption(f"💵 Ingreso promedio estimado: US${avg_income_usd:,.0f}/mes · Tipo de cambio configurado: {fx:.2f} MXN/USD")
 
     st.subheader("🎯 Meta: llevar tarjetas y préstamos a $0")
     st.progress(progress,text=f"Avance {progress*100:.1f}% · Reducido {money(paid_total)} · Restante {money(total_debt)}")
@@ -426,16 +446,45 @@ if st.session_state.nav == "🏠 Resumen":
 # DEUDAS / DETALLE
 # ---------------------------
 elif st.session_state.nav == "💳 Deudas":
-    ids=[d["id"] for d in ds]
-    default_idx=ids.index(st.session_state.selected_debt_id) if st.session_state.selected_debt_id in ids else 0
-    d=st.selectbox("Selecciona una tarjeta o préstamo",ds,index=default_idx,format_func=lambda x:x["name"])
-    st.session_state.selected_debt_id=d["id"]
-    st.markdown(image_html(d["image_path"],d["institution"]),unsafe_allow_html=True)
-    c1,c2,c3,c4=st.columns(4)
-    c1.metric("Saldo actual",money(d["current_balance"]))
-    c2.metric("Pago mínimo",money(d["minimum_payment"]))
-    c3.metric("Fecha límite",f"Día {d['due_day']}")
-    c4.metric("Disponible",money(d["available_credit"]) if d["available_credit"] is not None else "—")
+    st.subheader("💳 Tarjetas y préstamos")
+    st.caption("Selecciona una cuenta para abrir su ficha completa, actualizar saldo, registrar pagos y consultar historial.")
+
+    grid=st.columns(3)
+    for i,item in enumerate(ds):
+        with grid[i%3]:
+            st.markdown(f"""
+            <div class='debt-card'>
+              {image_html(item['image_path'],item['institution'])}
+              <div class='debt-name'>{item['name']}</div>
+              <div class='debt-value'>{money(item['current_balance'])}</div>
+              <div class='small'>Pago mínimo: {money(item['minimum_payment'])}</div>
+              <div class='small'>Fecha límite: día {item['due_day']}</div>
+              {"<div class='small'>Crédito disponible: "+money(item['available_credit'])+"</div>" if item['credit_limit'] is not None else ""}
+            </div>
+            """,unsafe_allow_html=True)
+            if st.button("Abrir detalle de la cuenta",key=f"debt_open_{item['id']}",use_container_width=True,type="primary" if st.session_state.selected_debt_id==item["id"] else "secondary"):
+                st.session_state.selected_debt_id=item["id"]
+                st.rerun()
+
+    ids=[x["id"] for x in ds]
+    if st.session_state.selected_debt_id not in ids:
+        st.info("Selecciona una tarjeta o préstamo arriba para ver su información detallada.")
+        st.stop()
+
+    d=next(x for x in ds if x["id"]==st.session_state.selected_debt_id)
+    st.divider()
+    st.markdown(f"## {d['name']}")
+    c_logo,c_info=st.columns([1,2.4])
+    with c_logo:
+        rel=d.get("image_path")
+        if rel and (APP_DIR/rel).exists():
+            st.image(str(APP_DIR/rel),use_container_width=True)
+    with c_info:
+        c1,c2,c3,c4=st.columns(4)
+        c1.metric("Saldo actual",money(d["current_balance"]))
+        c2.metric("Pago mínimo",money(d["minimum_payment"]))
+        c3.metric("Fecha límite",f"Día {d['due_day']}")
+        c4.metric("Disponible",money(d["available_credit"]) if d["available_credit"] is not None else "—")
 
     paid_this=pmap.get(d["id"],0); remaining=max(float(d["minimum_payment"] or 0)-paid_this,0)
     if remaining<=0.001:
@@ -545,6 +594,17 @@ elif st.session_state.nav == "🧾 Compromisos":
                   {status_html}
                 </div>
                 """,unsafe_allow_html=True)
+                if st.button("Ver detalle",key=f"commit_detail_{r['id']}",use_container_width=True):
+                    st.session_state.selected_commitment_id=r["id"]
+                    st.rerun()
+                if st.session_state.selected_commitment_id == r["id"]:
+                    st.info(
+                        f"{r['name']} · {r['category']} · {money(r['amount'],r['currency'])} · "
+                        f"Vence {('día '+str(r['due_day'])) if r['due_day'] else r['frequency']} · "
+                        f"Frecuencia: {r['frequency']}."
+                    )
+                    if r.get("notes"):
+                        st.caption(r["notes"])
                 if not paid_now:
                     if st.button("Marcar como pagado",key=f"exp_{r['id']}",use_container_width=True):
                         execute("INSERT INTO expense_payments(expense_id,amount,currency,payment_date,period_year,period_month,note) VALUES(?,?,?,?,?,?,?)",(r["id"],r["amount"],r["currency"],t.isoformat(),t.year,t.month,"Marcado desde Compromisos"))
