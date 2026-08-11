@@ -3,14 +3,14 @@ from datetime import date, datetime
 import calendar
 import base64
 import mimetypes
-import sqlite3
+import psycopg
+from psycopg.rows import dict_row
 import hashlib
 
 import pandas as pd
 import streamlit as st
 
 APP_DIR = Path(__file__).resolve().parent
-DB_PATH = APP_DIR / "finance_data.db"
 
 st.set_page_config(
     page_title="Control de Finanzas",
@@ -256,193 +256,62 @@ if not st.session_state.authenticated:
     st.stop()
 
 # ---------------------------
-# SQLITE
+# SUPABASE / POSTGRESQL
 # ---------------------------
+def database_url():
+    try:
+        return str(st.secrets["database"]["url"]).strip()
+    except Exception:
+        st.error("Falta configurar [database] url en los Secrets de Streamlit.")
+        st.code('[database]\nurl = "TU_CADENA_SESSION_POOLER_DE_SUPABASE"', language="toml")
+        st.stop()
+
+def _pg_sql(sql):
+    return sql.replace("?", "%s")
+
 def conn():
-    c = sqlite3.connect(DB_PATH)
-    c.row_factory = sqlite3.Row
-    c.execute("PRAGMA foreign_keys=ON")
-    return c
-
-def init_db():
-    with conn() as c:
-        c.executescript("""
-        CREATE TABLE IF NOT EXISTS debts(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            institution TEXT NOT NULL,
-            debt_type TEXT NOT NULL,
-            current_balance REAL NOT NULL DEFAULT 0,
-            original_balance REAL,
-            credit_limit REAL,
-            available_credit REAL,
-            minimum_payment REAL NOT NULL DEFAULT 0,
-            due_day INTEGER,
-            image_path TEXT,
-            priority INTEGER DEFAULT 100,
-            active INTEGER DEFAULT 1,
-            notes TEXT DEFAULT '',
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS debt_history(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            debt_id INTEGER NOT NULL,
-            previous_balance REAL,
-            new_balance REAL NOT NULL,
-            reason TEXT NOT NULL,
-            note TEXT DEFAULT '',
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(debt_id) REFERENCES debts(id) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS debt_payments(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            debt_id INTEGER NOT NULL,
-            amount REAL NOT NULL,
-            payment_date TEXT NOT NULL,
-            period_year INTEGER NOT NULL,
-            period_month INTEGER NOT NULL,
-            note TEXT DEFAULT '',
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(debt_id) REFERENCES debts(id) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS recurring_expenses(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            category TEXT NOT NULL,
-            currency TEXT NOT NULL DEFAULT 'MXN',
-            amount REAL NOT NULL DEFAULT 0,
-            frequency TEXT NOT NULL DEFAULT 'monthly',
-            due_day INTEGER,
-            variable_amount INTEGER DEFAULT 0,
-            image_path TEXT,
-            active INTEGER DEFAULT 1,
-            notes TEXT DEFAULT '',
-            next_due_date TEXT,
-            coverage_start TEXT,
-            coverage_end TEXT,
-            policy_end TEXT,
-            subsequent_amount REAL
-        );
-        CREATE TABLE IF NOT EXISTS expense_payments(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            expense_id INTEGER NOT NULL,
-            amount REAL NOT NULL,
-            currency TEXT NOT NULL,
-            payment_date TEXT NOT NULL,
-            period_year INTEGER NOT NULL,
-            period_month INTEGER NOT NULL,
-            note TEXT DEFAULT '',
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(expense_id) REFERENCES recurring_expenses(id) ON DELETE CASCADE
-        );
-        CREATE TABLE IF NOT EXISTS incomes(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            source TEXT NOT NULL,
-            amount REAL NOT NULL,
-            currency TEXT NOT NULL DEFAULT 'USD',
-            income_date TEXT NOT NULL,
-            exchange_rate REAL,
-            amount_mxn REAL,
-            note TEXT DEFAULT '',
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS daily_expenses(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            category TEXT NOT NULL,
-            description TEXT NOT NULL,
-            amount REAL NOT NULL,
-            currency TEXT NOT NULL,
-            expense_date TEXT NOT NULL,
-            exchange_rate REAL,
-            amount_mxn REAL,
-            note TEXT DEFAULT '',
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        );
-        CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);
-        """)
-        # Migraciones suaves para versiones anteriores del archivo SQLite.
-        existing_cols = {r[1] for r in c.execute("PRAGMA table_info(recurring_expenses)").fetchall()}
-        for col, ddl in [
-            ("next_due_date", "TEXT"),
-            ("coverage_start", "TEXT"),
-            ("coverage_end", "TEXT"),
-            ("policy_end", "TEXT"),
-            ("subsequent_amount", "REAL"),
-        ]:
-            if col not in existing_cols:
-                c.execute(f"ALTER TABLE recurring_expenses ADD COLUMN {col} {ddl}")
-
-        if c.execute("SELECT COUNT(*) FROM debts").fetchone()[0] == 0:
-            seed = [
-                ("Banorte Oro","Banorte","credit_card",13429.21,13429.21,15000.00,1570.79,990.47,30,"assets/banorte_oro.png",30,""),
-                ("BBVA Crédito","BBVA","credit_card",25366.20,25366.20,24200.00,-1166.20,1200.00,5,"assets/bbva_credito.jpg",10,"Límite excedido"),
-                ("BanCoppel Crédito","BanCoppel","credit_card",9756.46,9756.46,11000.00,1243.54,794.40,16,"assets/bancoppel_credito.png",40,""),
-                ("BanCoppel Crédito Personal","BanCoppel","loan",12023.15,12023.15,12000.00,-23.15,1435.00,7,"assets/bancoppel_credito.png",20,""),
-                ("Coppel Préstamo Personal","Coppel","loan",22000.00,22000.00,None,None,1500.00,5,"assets/bancoppel_credito.png",25,""),
-                ("DiDi Préstamos","DiDi","loan",10089.79,10089.79,None,None,733.63,14,"assets/didi.png",35,""),
-            ]
-            c.executemany("""INSERT INTO debts(name,institution,debt_type,current_balance,original_balance,credit_limit,available_credit,minimum_payment,due_day,image_path,priority,notes)
-                             VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""", seed)
-        if c.execute("SELECT COUNT(*) FROM recurring_expenses").fetchone()[0] == 0:
-            seed = [
-                ("ChatGPT Plus","Suscripción","MXN",399,"monthly",1,0,"assets/chatgpt.jpg",1,""),
-                ("iCloud Drive","Suscripción","MXN",49,"monthly",2,0,"assets/icloud.png",1,""),
-                ("Amazon Prime","Suscripción","MXN",99,"monthly",17,0,"assets/amazon_prime.png",1,""),
-                ("Infonavit","Vivienda México","MXN",4000,"monthly",30,0,"assets/infonavit.png",1,"Deuda total Infonavit: $347,534.72 MXN"),
-                ("Megacable","Servicios México","MXN",700,"monthly",5,0,"assets/megacable.png",1,""),
-                ("JAPAC","Servicios México","MXN",140,"monthly",24,0,"assets/japac.jpg",1,""),
-                ("CFE","Servicios México","MXN",87,"bimonthly",21,1,"assets/cfe.jpg",1,"Variable. Último recibo pagado."),
-                ("Telcel","Telefonía","MXN",699,"monthly",18,0,"assets/telcel.png",1,""),
-                ("Renta actual","Vivienda USA","USD",560,"monthly",1,0,None,1,""),
-            ]
-            c.executemany("""INSERT INTO recurring_expenses(name,category,currency,amount,frequency,due_day,variable_amount,image_path,active,notes)
-                             VALUES(?,?,?,?,?,?,?,?,?,?)""", seed)
-        # Seguro de auto Latino Seguros: se agrega aunque la base ya exista.
-        if c.execute("SELECT COUNT(*) FROM recurring_expenses WHERE name='Latino Seguros - Auto'").fetchone()[0] == 0:
-            c.execute("""INSERT INTO recurring_expenses(
-                name,category,currency,amount,frequency,due_day,variable_amount,image_path,active,notes,
-                next_due_date,coverage_start,coverage_end,policy_end,subsequent_amount
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(
-                "Latino Seguros - Auto","Seguro de auto","MXN",3486.00,"quarterly",29,0,
-                "assets/latino_seguros.png",1,
-                "Primer pago realizado por $3,486 MXN. Cobertura inicial del 29/07/2026 al 29/10/2026. "
-                "Los pagos subsecuentes son de $2,673.95 MXN. Póliza con vigencia de un año.",
-                "2026-10-29","2026-07-29","2026-10-29","2027-07-29",2673.95
-            ))
-            insurance_id = c.execute("SELECT id FROM recurring_expenses WHERE name='Latino Seguros - Auto'").fetchone()[0]
-            c.execute("""INSERT INTO expense_payments(expense_id,amount,currency,payment_date,period_year,period_month,note)
-                         VALUES(?,?,?,?,?,?,?)""",(
-                insurance_id,3486.00,"MXN","2026-07-29",2026,7,
-                "Primer pago de póliza. Cobertura 29/07/2026 a 29/10/2026."
-            ))
-
-        c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('mxn_per_usd','18.50')")
-        c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES('debt_goal_start','92664.81')")
-        c.commit()
+    return psycopg.connect(
+        database_url(),
+        sslmode="require",
+        row_factory=dict_row,
+        connect_timeout=15,
+    )
 
 def rows(sql, params=()):
     with conn() as c:
-        return [dict(r) for r in c.execute(sql, params).fetchall()]
+        with c.cursor() as cur:
+            cur.execute(_pg_sql(sql), params)
+            return [dict(r) for r in cur.fetchall()]
 
 def one(sql, params=()):
     with conn() as c:
-        r = c.execute(sql, params).fetchone()
-        return dict(r) if r else None
+        with c.cursor() as cur:
+            cur.execute(_pg_sql(sql), params)
+            r = cur.fetchone()
+            return dict(r) if r else None
 
 def execute(sql, params=()):
     with conn() as c:
-        c.execute(sql, params)
+        with c.cursor() as cur:
+            cur.execute(_pg_sql(sql), params)
         c.commit()
+
+def healthcheck():
+    try:
+        return True, one("SELECT current_database() AS db, NOW() AS server_time")
+    except Exception as e:
+        return False, str(e)
 
 def setting(key, default):
     r = one("SELECT value FROM settings WHERE key=?", (key,))
     return r["value"] if r else default
 
 def set_setting(key, value):
-    execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
-
-init_db()
+    execute(
+        """INSERT INTO settings(key,value) VALUES(?,?)
+           ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value""",
+        (key, str(value)),
+    )
 
 # ---------------------------
 # HELPERS
@@ -475,8 +344,8 @@ def compact_image_html(relpath, fallback, wrapper='commitment-logo'):
     fallback_class = 'commitment-fallback' if wrapper == 'commitment-logo' else 'payment-logo-box'
     return f"<div class='{fallback_class}'>{fallback}</div>"
 
-def debts(): return rows("SELECT * FROM debts WHERE active=1 ORDER BY priority,id")
-def recurring(): return rows("SELECT * FROM recurring_expenses WHERE active=1 ORDER BY due_day,id")
+def debts(): return rows("SELECT * FROM debts WHERE active=TRUE ORDER BY priority,id")
+def recurring(): return rows("SELECT * FROM recurring_expenses WHERE active=TRUE ORDER BY due_day,id")
 
 def parse_iso_date(value):
     if not value:
@@ -566,7 +435,7 @@ PAGES=[
     ("🧾","Compromisos","🧾 Compromisos"),
     ("💵","Ingresos","💵 Ingresos"),
     ("🛒","Gastos diarios","🛒 Gastos diarios"),
-    ("💾","Respaldo","💾 Respaldo"),
+    ("☁️","Base de datos","☁️ Base de datos"),
     ("⚙️","Configuración","⚙️ Configuración"),
 ]
 if "nav" not in st.session_state: st.session_state.nav="🏠 Resumen"
@@ -659,6 +528,13 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+db_ok, _db_info = healthcheck()
+if db_ok:
+    st.caption("☁️ Supabase conectado · PostgreSQL")
+else:
+    st.error("⚠️ No hay conexión con Supabase. Revisa el Secret [database].")
+
+
 # ---------------------------
 # RESUMEN
 # ---------------------------
@@ -672,7 +548,7 @@ if st.session_state.nav == "🏠 Resumen":
         elif r.get("frequency")=="bimonthly":
             amt=amt/2.0
         fixed_mxn += amt*(fx if r["currency"]=="USD" else 1)
-    daily_month=one("SELECT COALESCE(SUM(amount_mxn),0) total FROM daily_expenses WHERE substr(expense_date,1,7)=?",(date.today().strftime("%Y-%m"),))
+    daily_month=one("SELECT COALESCE(SUM(amount_mxn),0) total FROM daily_expenses WHERE TO_CHAR(expense_date,'YYYY-MM')=?",(date.today().strftime("%Y-%m"),))
     daily_mxn=float(daily_month["total"] or 0) if daily_month else 0
     avg_income_usd=2000+(220*4)
 
@@ -1032,7 +908,7 @@ elif st.session_state.nav == "💵 Ingresos":
 # ---------------------------
 elif st.session_state.nav == "🛒 Gastos diarios":
     st.subheader("🛒 Mis gastos diarios")
-    current=one("SELECT COALESCE(SUM(amount_mxn),0) total FROM daily_expenses WHERE substr(expense_date,1,7)=?",(date.today().strftime("%Y-%m"),))
+    current=one("SELECT COALESCE(SUM(amount_mxn),0) total FROM daily_expenses WHERE TO_CHAR(expense_date,'YYYY-MM')=?",(date.today().strftime("%Y-%m"),))
     st.metric("Gastos registrados este mes",money(current["total"] if current else 0))
     with st.form("daily_form"):
         cat=st.selectbox("Categoría",["Comida","Gasolina","Supermercado","Ocio","Compras","Transporte","Salud","Otro"])
@@ -1059,14 +935,21 @@ elif st.session_state.nav == "🛒 Gastos diarios":
 # ---------------------------
 # RESPALDO
 # ---------------------------
-elif st.session_state.nav == "💾 Respaldo":
-    st.subheader("💾 Respaldo")
-    st.warning("Esta versión usa SQLite local dentro de Streamlit. Descarga el respaldo con frecuencia porque Streamlit Cloud puede reiniciar el contenedor.")
-    if DB_PATH.exists():
-        st.download_button("⬇️ Descargar respaldo completo",DB_PATH.read_bytes(),file_name=f"control_finanzas_{date.today().isoformat()}.db",mime="application/octet-stream",use_container_width=True)
-    up=st.file_uploader("Restaurar respaldo .db",type=["db"])
-    if up and st.button("Restaurar respaldo",type="primary",use_container_width=True):
-        DB_PATH.write_bytes(up.getvalue()); st.success("Respaldo restaurado."); st.rerun()
+elif st.session_state.nav == "☁️ Base de datos":
+    st.subheader("☁️ Supabase")
+    st.caption("Todos los cambios de esta versión se guardan directamente en PostgreSQL / Supabase.")
+    ok, info = healthcheck()
+    if ok:
+        st.success("Conexión a Supabase activa.")
+        c1,c2,c3,c4=st.columns(4)
+        c1.metric("Deudas", one("SELECT COUNT(*) n FROM debts")["n"])
+        c2.metric("Compromisos", one("SELECT COUNT(*) n FROM recurring_expenses")["n"])
+        c3.metric("Pagos deuda", one("SELECT COUNT(*) n FROM debt_payments")["n"])
+        c4.metric("Pagos compromisos", one("SELECT COUNT(*) n FROM expense_payments")["n"])
+        st.info("Los datos ya no dependen del almacenamiento local de Streamlit.")
+    else:
+        st.error("No se pudo conectar con Supabase.")
+        st.code(str(info))
 
 # ---------------------------
 # CONFIG
