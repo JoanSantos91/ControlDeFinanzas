@@ -414,10 +414,89 @@ def debt_paid_map():
     r=rows("SELECT debt_id,COALESCE(SUM(amount),0) amount FROM debt_payments WHERE period_year=? AND period_month=? GROUP BY debt_id",(t.year,t.month))
     return {x["debt_id"]:float(x["amount"] or 0) for x in r}
 
+def debt_next_due(d, paid_amount=0):
+    """Si el mínimo del mes ya está cubierto, muestra el vencimiento del mes siguiente."""
+    today=date.today()
+    day=int(d.get("due_day") or calendar.monthrange(today.year,today.month)[1])
+    current_due=date(today.year,today.month,min(day,calendar.monthrange(today.year,today.month)[1]))
+    minimum=float(d.get("minimum_payment") or 0)
+    if minimum>0 and paid_amount+0.001>=minimum:
+        return add_months(current_due,1,day)
+    return current_due
+
+def debt_payment_status(d, paid_amount=0):
+    due=debt_next_due(d,paid_amount)
+    minimum=float(d.get("minimum_payment") or 0)
+    if minimum>0 and paid_amount+0.001>=minimum:
+        days=(due-date.today()).days
+        return f"✅ Pagado · próximo pago en {days} días", "good", due
+    days=(due-date.today()).days
+    if days<0:
+        return f"Vencido hace {abs(days)} días", "bad", due
+    if days==0:
+        return "Vence hoy", "bad", due
+    if days<=3:
+        return f"Vence en {days} días", "bad", due
+    if days<=7:
+        return f"Vence en {days} días", "warn", due
+    return f"Vence en {days} días", "good", due
+
+def latest_quick_debt_payment(debt_id):
+    t=date.today()
+    return one("""SELECT id,amount,payment_date,note
+                  FROM debt_payments
+                  WHERE debt_id=? AND period_year=? AND period_month=?
+                    AND note='Pago mínimo marcado desde Pagos'
+                  ORDER BY id DESC LIMIT 1""",(debt_id,t.year,t.month))
+
+def undo_quick_debt_payment(d):
+    """Revierte solo el pago rápido creado desde la pestaña Pagos."""
+    p=latest_quick_debt_payment(d["id"])
+    if not p:
+        return False
+    amount=float(p["amount"] or 0)
+    current=float(d["current_balance"] or 0)
+    restored=current+amount
+    execute("DELETE FROM debt_payments WHERE id=?",(p["id"],))
+    execute("UPDATE debts SET current_balance=?,updated_at=? WHERE id=?",
+            (restored,datetime.now().isoformat(timespec="seconds"),d["id"]))
+    # Elimina el último historial generado por ese pago rápido si coincide.
+    h=one("""SELECT id FROM debt_history
+             WHERE debt_id=? AND reason='Pago' AND note='Pago mínimo marcado desde Pagos'
+             ORDER BY id DESC LIMIT 1""",(d["id"],))
+    if h:
+        execute("DELETE FROM debt_history WHERE id=?",(h["id"],))
+    return True
+
 def expense_paid_map():
     t=date.today()
     r=rows("SELECT expense_id,COALESCE(SUM(amount),0) amount FROM expense_payments WHERE period_year=? AND period_month=? GROUP BY expense_id",(t.year,t.month))
     return {x["expense_id"]:float(x["amount"] or 0) for x in r}
+
+def latest_current_expense_payment(expense_id):
+    t=date.today()
+    return one("""SELECT id,amount,payment_date,note
+                  FROM expense_payments
+                  WHERE expense_id=? AND period_year=? AND period_month=?
+                  ORDER BY id DESC LIMIT 1""",(expense_id,t.year,t.month))
+
+def undo_current_expense_payment(r):
+    """Borra el pago del mes actual. Para trimestrales revierte también la fecha de ciclo."""
+    p=latest_current_expense_payment(r["id"])
+    if not p:
+        return False
+    execute("DELETE FROM expense_payments WHERE id=?",(p["id"],))
+
+    if r.get("frequency")=="quarterly" and r.get("next_due_date"):
+        current_next=parse_iso_date(r["next_due_date"])
+        if current_next:
+            previous_due=add_months(current_next,-3,current_next.day)
+            previous_start=add_months(previous_due,-3,previous_due.day)
+            execute("""UPDATE recurring_expenses
+                       SET next_due_date=?,coverage_start=?,coverage_end=?
+                       WHERE id=?""",
+                    (previous_due.isoformat(),previous_start.isoformat(),previous_due.isoformat(),r["id"]))
+    return True
 
 def navigate(page, debt_id=None):
     st.session_state.nav = page
@@ -652,12 +731,8 @@ if st.session_state.nav == "🏠 Resumen":
     st.markdown("<div class='section-title'>Mis tarjetas y préstamos</div>",unsafe_allow_html=True)
     cols=st.columns(3)
     for i,d in enumerate(ds):
-        paid=pmap.get(d["id"],0); minimum=float(d["minimum_payment"] or 0); due=due_date(d["due_day"]); days=(due-date.today()).days
-        if paid>=minimum and minimum>0: status,cls="Pagado este mes","good"
-        elif days<0: status,cls=f"Vencido {abs(days)} días","bad"
-        elif days<=3: status,cls=f"Vence en {days} días","bad"
-        elif days<=7: status,cls=f"Vence en {days} días","warn"
-        else: status,cls=f"Vence día {due.day}","good"
+        paid=pmap.get(d["id"],0)
+        status,cls,due=debt_payment_status(d,paid)
         original=float(d["original_balance"] or d["current_balance"] or 0)
         indiv=max(0,min(1,(original-float(d["current_balance"] or 0))/original if original else 0))
         with cols[i%3]:
@@ -721,11 +796,19 @@ elif st.session_state.nav == "💳 Deudas":
         c3.metric("Fecha límite",f"Día {d['due_day']}")
         c4.metric("Disponible",money(d["available_credit"]) if d["available_credit"] is not None else "—")
 
-    paid_this=pmap.get(d["id"],0); remaining=max(float(d["minimum_payment"] or 0)-paid_this,0)
+    paid_this=pmap.get(d["id"],0)
+    remaining=max(float(d["minimum_payment"] or 0)-paid_this,0)
+    debt_status_text,debt_status_cls,debt_due=debt_payment_status(d,paid_this)
     if remaining<=0.001:
-        st.success(f"✅ Pago mínimo cubierto este mes. Has registrado {money(paid_this)}.")
+        st.success(f"✅ Pago mínimo cubierto. Próximo vencimiento: {debt_due.strftime('%d/%m/%Y')}.")
     else:
-        st.warning(f"Pendiente mínimo este mes: {money(remaining)}")
+        days_to_due=(debt_due-date.today()).days
+        if days_to_due<0:
+            st.error(f"🔴 Pago vencido hace {abs(days_to_due)} días · pendiente mínimo: {money(remaining)}")
+        elif days_to_due<=7:
+            st.warning(f"🟡 Vence en {days_to_due} días · pendiente mínimo: {money(remaining)}")
+        else:
+            st.info(f"Próximo vencimiento: {debt_due.strftime('%d/%m/%Y')} · pendiente mínimo: {money(remaining)}")
 
     t1,t2,t3=st.tabs(["Actualizar saldo total","Registrar pago","Historial"])
     with t1:
@@ -767,34 +850,59 @@ elif st.session_state.nav == "💳 Deudas":
 # PAGOS
 # ---------------------------
 elif st.session_state.nav == "📅 Pagos":
-    st.subheader("📅 Pagos de tarjetas y préstamos")
-    st.caption("Cada deuda se muestra con su logo. Puedes abrir el detalle o marcar rápidamente el pago mínimo del mes.")
+    st.subheader("📅 Control de pagos de tarjetas y préstamos")
+    st.caption("Aquí puedes ver qué pagos están próximos a vencer, cuáles están vencidos y marcar o desmarcar el pago mínimo del mes.")
+
     for d in ds:
-        paid=pmap.get(d["id"],0); minp=float(d["minimum_payment"] or 0); remaining=max(minp-paid,0)
-        c_logo,c_info,c_min,c_paid,c_action=st.columns([.7,2,1,1,1.15])
+        paid=pmap.get(d["id"],0)
+        minp=float(d["minimum_payment"] or 0)
+        remaining=max(minp-paid,0)
+        status_text,status_cls,next_due=debt_payment_status(d,paid)
+        c_logo,c_info,c_min,c_paid,c_action=st.columns([.75,2.2,1.1,1.1,1.35])
+
         with c_logo:
             rel=d.get("image_path")
             if rel and (APP_DIR/rel).exists():
                 st.image(str(APP_DIR/rel),use_container_width=True)
             else:
                 st.markdown(f"**{d['institution']}**")
+
         with c_info:
             st.write(f"**{d['name']}**")
-            st.caption(f"Fecha límite: día {d['due_day']}")
-            if st.button("Ver detalle",key=f"pay_detail_{d['id']}",use_container_width=True):
+            st.caption(f"Próximo vencimiento: {next_due.strftime('%d/%m/%Y')}")
+            if status_cls=="bad":
+                st.error(status_text)
+            elif status_cls=="warn":
+                st.warning(status_text)
+            else:
+                st.success(status_text)
+            if st.button("Abrir cuenta",key=f"pay_detail_{d['id']}",use_container_width=True):
                 navigate("💳 Deudas",d["id"])
-        c_min.write(f"Mínimo  \n**{money(minp)}**")
-        c_paid.write(f"Pagado  \n**{money(paid)}**")
+
+        c_min.write(f"Mínimo\n**{money(minp)}**")
+        c_paid.write(f"Pagado este mes\n**{money(paid)}**")
+
         with c_action:
+            quick=latest_quick_debt_payment(d["id"])
             if remaining<=0.001:
-                st.success("✅ Pagado")
-            elif st.button("Marcar mínimo pagado",key=f"quickpay_{d['id']}",use_container_width=True):
+                st.success("✅ Cubierto")
+                if quick and st.button("↩️ Deshacer pago",key=f"undo_quickpay_{d['id']}",use_container_width=True):
+                    if undo_quick_debt_payment(d):
+                        st.success("Pago desmarcado y saldo restaurado.")
+                        st.rerun()
+            elif st.button("✅ Marcar mínimo pagado",key=f"quickpay_{d['id']}",use_container_width=True,type="primary"):
                 t=date.today()
-                execute("INSERT INTO debt_payments(debt_id,amount,payment_date,period_year,period_month,note) VALUES(?,?,?,?,?,?)",(d["id"],remaining,t.isoformat(),t.year,t.month,"Pago mínimo marcado desde Pagos"))
-                prev=float(d["current_balance"] or 0); new=max(prev-remaining,0)
-                execute("UPDATE debts SET current_balance=?,updated_at=? WHERE id=?",(new,datetime.now().isoformat(timespec="seconds"),d["id"]))
-                execute("INSERT INTO debt_history(debt_id,previous_balance,new_balance,reason,note) VALUES(?,?,?,?,?)",(d["id"],prev,new,"Pago","Pago mínimo marcado desde Pagos"))
+                execute("INSERT INTO debt_payments(debt_id,amount,payment_date,period_year,period_month,note) VALUES(?,?,?,?,?,?)",
+                        (d["id"],remaining,t.isoformat(),t.year,t.month,"Pago mínimo marcado desde Pagos"))
+                prev=float(d["current_balance"] or 0)
+                new=max(prev-remaining,0)
+                execute("UPDATE debts SET current_balance=?,updated_at=? WHERE id=?",
+                        (new,datetime.now().isoformat(timespec="seconds"),d["id"]))
+                execute("INSERT INTO debt_history(debt_id,previous_balance,new_balance,reason,note) VALUES(?,?,?,?,?)",
+                        (d["id"],prev,new,"Pago","Pago mínimo marcado desde Pagos"))
+                st.success("Pago marcado. El próximo vencimiento se actualizará al siguiente mes.")
                 st.rerun()
+
         st.divider()
 
 # ---------------------------
@@ -802,7 +910,7 @@ elif st.session_state.nav == "📅 Pagos":
 # ---------------------------
 elif st.session_state.nav == "🧾 Compromisos":
     st.subheader("🧾 Mis compromisos fijos")
-    st.caption("Vivienda, servicios y suscripciones con sus logos. Cada tarjeta te muestra monto, vencimiento y estado del pago del mes.")
+    st.caption("Cada tarjeta muestra el próximo vencimiento real. Si marcas un pago por error, puedes deshacerlo y la fecha vuelve al ciclo correspondiente.")
     rs=recurring(); t=date.today()
     # Promedio mensual: trimestrales se prorratean entre 3 para no inflar el total del mes.
     total_fixed=0.0
@@ -833,7 +941,7 @@ elif st.session_state.nav == "🧾 Compromisos":
                 latest_payment = latest_expense_payment(r["id"])
                 paid_hint = ""
                 if latest_payment:
-                    paid_hint = f"<div class='small' style='margin-top:7px;color:#168356;font-weight:800'>✅ Último pago: {latest_payment['payment_date']}</div>"
+                    paid_hint = f"<div class='small' style='margin-top:7px;color:#617189;font-weight:750'>Último pago registrado: {latest_payment['payment_date']}</div>"
                 freq_label = {"monthly":"Mensual","bimonthly":"Bimestral","quarterly":"Trimestral"}.get(r["frequency"],r["frequency"])
                 st.markdown(f"""
                 <div class='commitment-card'>
@@ -865,23 +973,27 @@ elif st.session_state.nav == "🧾 Compromisos":
                         )
                     if r.get("notes"):
                         st.caption(r["notes"])
-                button_label = "✅ Pago registrado este mes" if paid_now else "Marcar como pagado"
-                if st.button(button_label,key=f"exp_{r['id']}",use_container_width=True,disabled=paid_now):
-                    pay_amount = float(r["subsequent_amount"] or r["amount"] or 0) if r.get("next_due_date") else float(r["amount"] or 0)
-                    execute("INSERT INTO expense_payments(expense_id,amount,currency,payment_date,period_year,period_month,note) VALUES(?,?,?,?,?,?,?)",
-                            (r["id"],pay_amount,r["currency"],t.isoformat(),t.year,t.month,"Marcado desde Compromisos"))
-                    if r.get("frequency")=="quarterly" and r.get("next_due_date"):
-                        old_due=parse_iso_date(r["next_due_date"])
-                        if old_due:
-                            new_due=add_months(old_due,3,old_due.day)
-                            execute("""UPDATE recurring_expenses
-                                       SET coverage_start=?,coverage_end=?,next_due_date=?,amount=?
-                                       WHERE id=?""",
-                                    (old_due.isoformat(),new_due.isoformat(),new_due.isoformat(),pay_amount,r["id"]))
-                    st.success("Pago registrado. El próximo vencimiento ya fue actualizado.")
-                    st.rerun()
+                if paid_now:
+                    st.success("✅ Pago registrado este mes")
+                    if st.button("↩️ Deshacer pago",key=f"undo_exp_{r['id']}",use_container_width=True):
+                        if undo_current_expense_payment(r):
+                            st.success("Pago desmarcado correctamente.")
+                            st.rerun()
                 else:
-                    st.success("Pago registrado")
+                    if st.button("✅ Marcar como pagado",key=f"exp_{r['id']}",use_container_width=True,type="primary"):
+                        pay_amount = float(r["subsequent_amount"] or r["amount"] or 0) if r.get("next_due_date") else float(r["amount"] or 0)
+                        execute("INSERT INTO expense_payments(expense_id,amount,currency,payment_date,period_year,period_month,note) VALUES(?,?,?,?,?,?,?)",
+                                (r["id"],pay_amount,r["currency"],t.isoformat(),t.year,t.month,"Marcado desde Compromisos"))
+                        if r.get("frequency")=="quarterly" and r.get("next_due_date"):
+                            old_due=parse_iso_date(r["next_due_date"])
+                            if old_due:
+                                new_due=add_months(old_due,3,old_due.day)
+                                execute("""UPDATE recurring_expenses
+                                           SET coverage_start=?,coverage_end=?,next_due_date=?,amount=?
+                                           WHERE id=?""",
+                                        (old_due.isoformat(),new_due.isoformat(),new_due.isoformat(),pay_amount,r["id"]))
+                        st.success("Pago registrado. El próximo vencimiento ya fue actualizado.")
+                        st.rerun()
                 if r.get("notes"):
                     with st.expander("Ver información"):
                         st.write(r["notes"])
